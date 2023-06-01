@@ -3,7 +3,7 @@
 - Also including [VWW](#VWW) (visual-wake-words) data prepare & training jupyter notebooks.
 ## 1. First step
 ### 1. Install virtual env  
-- If you havn't install [NuEdgeWise](https://github.com/MaxCYCHEN/NuEdgeWise), please follow the steps to install python virtual env and ***choose `NuEdgeWise_env`***.
+- If you havn't install [NuEdgeWise](https://github.com/OpenNuvoton/NuEdgeWise), please follow the steps to install python virtual env and ***choose `NuEdgeWise_env`***.
 - Skip if you have done.
 ### 2. Running
 - The `classfication.ipynb` will help you prepare data, train the model, and finally convert to tflite & c++ file.
