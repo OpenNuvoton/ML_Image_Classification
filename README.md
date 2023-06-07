@@ -1,6 +1,5 @@
 # ML_tf2_image_classfication_nu
 - Tensorflow image classfication with tflite and vela C/C++ source file converting.
-- Also including [VWW](#VWW) (visual-wake-words) data prepare & training jupyter notebooks.
 ## 1. First step
 ### 1. Install virtual env  
 - If you havn't install [NuEdgeWise](https://github.com/OpenNuvoton/NuEdgeWise), please follow the steps to install python virtual env and ***choose `NuEdgeWise_env`***.
@@ -27,10 +26,6 @@
 - Image convert to bytes source file: `cmd.ipynb` will show you how to use the script in `datasets\gen_rgb_cpp.py`
 
 ## 3. Inference code
-- MCU: [M55+NPU](https://github.com/chchen59/M55A1BSP)  (not yet released)
+- MCU: 
 - MPU: [MA35D1](https://github.com/OpenNuvoton/MA35D1_Linux_Applications/tree/master/machine_learning)
 
-# VWW
-- What is [VWW](https://paperswithcode.com/dataset/visual-wake-words).
-- So far we offer python scripts for COCO data prepare & training.
-- Steps/usage will update latter.
