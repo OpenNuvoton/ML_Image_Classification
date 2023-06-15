@@ -13,8 +13,6 @@ import datetime
 #from tqdm import tqdm, trange
 from tqdm.notebook import tqdm
 
-from backbone import VWW
-
 import tensorflow as tf
 
 #from importlib import reload
@@ -411,13 +409,7 @@ class train():
           self.custom_model = tf.keras.Model(inputs, outputs)
       
       elif info_dict['MODEL_NAME'] == 'mobilenet_v3':
-          print("mobilenet_v3")
-          
-      elif info_dict['MODEL_NAME'].lower() == 'vww4':
-          print("VWW4")
-          IMG_SHAPE = (info_dict['IMG_SIZE'], info_dict['IMG_SIZE']) + (1,) 
-          vww_model = VWW(IMG_SHAPE)
-          self.custom_model = vww_model.vww_model 
+          print("mobilenet_v3 is not support yet.")
 
   def predict_TopN(self, custom_model, dataset, top_N=5):
     
@@ -707,29 +699,29 @@ class train():
             f.write(tflite_model)
       print("The tflite output location: {}".format(output_location))
       
-      ## int8 Full tflite
-      #converter = tf.lite.TFLiteConverter.from_keras_model(self.custom_model)
-      #converter.optimizations = [tf.lite.Optimize.DEFAULT]
-      #converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8, tf.lite.OpsSet.TFLITE_BUILTINS]
+      # int8 Full tflite
+      converter = tf.lite.TFLiteConverter.from_keras_model(self.custom_model)
+      converter.optimizations = [tf.lite.Optimize.DEFAULT]
+      converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8, tf.lite.OpsSet.TFLITE_BUILTINS]
+      converter.representative_dataset = representative_dataset
+      converter.inference_input_type = tf.int8  # or tf.uint8
+      converter.inference_output_type = tf.int8  # or tf.uint8
+      tflite_model = converter.convert()
+      output_location = os.path.join(self.output_tflite_location, (info_dict['MODEL_NAME'] + r'_int8quant.tflite'))
+      with open(output_location, 'wb') as f:
+            f.write(tflite_model)
+      print("The tflite output location: {}".format(output_location)) 
+      
+      # f16 tflite
+      converter = tf.lite.TFLiteConverter.from_keras_model(self.custom_model)
+      converter.optimizations = [tf.lite.Optimize.DEFAULT]
+      converter.target_spec.supported_types = [tf.float16]
       #converter.representative_dataset = representative_dataset
-      #converter.inference_input_type = tf.int8  # or tf.uint8
-      #converter.inference_output_type = tf.int8  # or tf.uint8
-      #tflite_model = converter.convert()
-      #output_location = os.path.join(self.output_tflite_location, (info_dict['MODEL_NAME'] + r'_int8quant.tflite'))
-      #with open(output_location, 'wb') as f:
-      #      f.write(tflite_model)
-      #print("The tflite output location: {}".format(output_location)) 
-      #
-      ## f16 tflite
-      #converter = tf.lite.TFLiteConverter.from_keras_model(self.custom_model)
-      #converter.optimizations = [tf.lite.Optimize.DEFAULT]
-      #converter.target_spec.supported_types = [tf.float16]
-      ##converter.representative_dataset = representative_dataset
-      #tflite_model = converter.convert()
-      #output_location = os.path.join(self.output_tflite_location, (args.MODEL_NAME + r'_f16quant.tflite'))
-      #with open(output_location, 'wb') as f:
-      #      f.write(tflite_model)
-      #print("The tflite output location: {}".format(output_location))                    
+      tflite_model = converter.convert()
+      output_location = os.path.join(self.output_tflite_location, (args.MODEL_NAME + r'_f16quant.tflite'))
+      with open(output_location, 'wb') as f:
+            f.write(tflite_model)
+      print("The tflite output location: {}".format(output_location))                    
 
   def tflite_inference(self, input_dataset, tflite_path, info_dict, batch_N):
       """Call forwards pass of TFLite file and returns the result.
@@ -900,8 +892,7 @@ if __name__ == "__main__":
         help='1: Show the train data and model, \
               2: Transfer training, \
               3: Transfer and fine tuning training, \
-              4: Test tflite, \
-              5: Train vww   ')
+              4: Test tflite')
   #parser.add_argument(
   #      '--TEST_RECORD',
   #      type=str2bool, 
@@ -940,8 +931,6 @@ if __name__ == "__main__":
   # The d_style will check the dataset's type for futher spliting of val and train
   train_dataset, validation_dataset, test_dataset = train_task.data_pre_load(data_loader.dir_list, data_loader.d_style, info_dict) 
   class_names = train_dataset.class_names
-  if info_dict['switch_mode'] == 5: # vww mode must be 2 classes
-      assert (len(class_names) == 2), "vww model only for 2 classes"
 
   if info_dict['switch_mode'] == 1:
       print("train dataset example:")
