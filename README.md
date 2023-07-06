@@ -1,16 +1,16 @@
-# ML_tf2_image_classfication_nu
-- Tensorflow image classfication with tflite and vela C/C++ source file converting.
+# ML_Image_Classification
+- TensorFlow image classification with TFLite and Vela-TFLite, converting C/C++ source files.
 ## 1. First step
 ### 1. Install virtual env  
-- If you havn't install [NuEdgeWise](https://github.com/OpenNuvoton/NuEdgeWise), please follow the steps to install python virtual env and ***choose `NuEdgeWise_env`***.
+- If you haven't installed [NuEdgeWise](https://github.com/OpenNuvoton/NuEdgeWise), please follow these steps to install Python virtual environment and ***choose `NuEdgeWise_env`***.
 - Skip if you have done.
 ### 2. Running
-- The `classfication.ipynb` will help you prepare data, train the model, and finally convert to tflite & c++ file.
+- The classfication.ipynb notebook will help you prepare data, train the model, and finally convert it to a TFLite and C++ file.
 
 ## 2. Work Flow
 ### 1. data prepare
-- User can use `classfication.ipynb` to download some easy dataset or prepare their custom dataset(or maybe download from other opensource, ex: Kaggle)
-- `classfication.ipynb` will prepare the user chosen dataset folder which support general structure(ex: the names of folders are class label)
+- Users can utilize classfication.ipynb to download easy datasets, prepare their custom datasets (or even download from other open-source platforms like Kaggle).
+- `classfication.ipynb` will prepare the user's chosen dataset folder, supporting a general structure where the folder names correspond to class labels.
 
 ### 2. training
 - `classfication.ipynb` offers some attributes for training configuration.
@@ -21,9 +21,9 @@
 - Use `classfication.ipynb` to test the tflite model.
 
 ### 4. Deployment
-- Use `classfication.ipynb` to convert tflite model to vela and C source/header files.
+- Utilize `classfication.ipynb` to convert the TFLite model to Vela and generate C source/header files.
 - Also support Label source/header files converting.
-- Image convert to bytes source file: `cmd.ipynb` will show you how to use the script in `datasets\gen_rgb_cpp.py`
+- The `cmd.ipynb` notebook will demonstrate how to use the script located in `datasets\gen_rgb_cpp.py` to convert an image to a bytes source file.
 
 ## 3. Inference code
 - MCU: 
