@@ -5,11 +5,11 @@
 - If you haven't installed [NuEdgeWise](https://github.com/OpenNuvoton/NuEdgeWise), please follow these steps to install Python virtual environment and ***choose `NuEdgeWise_env`***.
 - Skip if you have done.
 ### 2. Running
-- The classfication.ipynb notebook will help you prepare data, train the model, and finally convert it to a TFLite and C++ file.
+- The `classfication.ipynb notebook` will help you prepare data, train the model, and finally convert it to a TFLite and C++ file.
 
 ## 2. Work Flow
 ### 1. data prepare
-- Users can utilize classfication.ipynb to download easy datasets, prepare their custom datasets (or even download from other open-source platforms like Kaggle).
+- Users can utilize `classfication.ipynb` to download easy datasets, prepare their custom datasets (or even download from other open-source platforms like Kaggle).
 - `classfication.ipynb` will prepare the user's chosen dataset folder, supporting a general structure where the folder names correspond to class labels.
 
 ### 2. training
