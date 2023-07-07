@@ -8,11 +8,11 @@
 - The `classfication.ipynb notebook` will help you prepare data, train the model, and finally convert it to a TFLite and C++ file.
 
 ## 2. Work Flow
-### 1. data prepare
+### 1. Data prepare
 - Users can utilize `classfication.ipynb` to download easy datasets, prepare their custom datasets (or even download from other open-source platforms like Kaggle).
 - `classfication.ipynb` will prepare the user's chosen dataset folder, supporting a general structure where the folder names correspond to class labels.
 
-### 2. training
+### 2. Training
 - `classfication.ipynb` offers some attributes for training configuration.
 - The strategy of this image classification training is [transfer learning & fine-tunning](https://www.tensorflow.org/tutorials/images/transfer_learning)
 - The output is tflite model.
