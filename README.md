@@ -3,7 +3,7 @@
 ## 1. First step
 ### 1. Install virtual env  
 - If you haven't installed [NuEdgeWise](https://github.com/OpenNuvoton/NuEdgeWise), please follow these steps to install Python virtual environment and ***choose `NuEdgeWise_env`***.
-- Skip if you have done.
+- Skip if you have already done it.
 ### 2. Running
 - The `classfication.ipynb notebook` will help you prepare data, train the model, and finally convert it to a TFLite and C++ file.
 
