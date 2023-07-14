@@ -77,7 +77,9 @@ class train():
            'STEPS_PER_EPOCH':  args.STEPS_PER_EPOCH,
            'switch_mode':      args.switch_mode,
            'TFLITE_F':         args.switch_mode,
-           'TFLITE_TEST_BATCH_N': args.TFLITE_TEST_BATCH_N
+           'TFLITE_TEST_BATCH_N': args.TFLITE_TEST_BATCH_N,
+           'IMAGENET_MODEL_EN':   args.IMAGENET_MODEL_EN,
+           'ALPHA_WIDTH':         args.ALPHA_WIDTH
        }   
 
   def data_pre_load(self, dir_list, d_style, info_dict):
@@ -369,47 +371,77 @@ class train():
       print("Finish the Test TFrecord Creating: {}.".format(test_record_file))             
 
   def _model_chooser(self, info_dict, class_len):
-      if info_dict['MODEL_NAME'] == 'mobilenet_v2':
-          # Rescale pixel values, 
-          # expects pixel values in [-1, 1] from [0, 255], or use 
-          # rescale = tf.keras.layers.Rescaling(1./127.5, offset=-1)
-          #preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
-          
-          # Create the base model from the pre-trained model MobileNet V2 without the top layer
-          IMG_SHAPE = (info_dict['IMG_SIZE'], info_dict['IMG_SIZE']) + (3,)
-          self.base_model = tf.keras.applications.MobileNetV2(input_shape=IMG_SHAPE,
-                                                         include_top=False,
-                                                         weights='imagenet')
-              
-          # Feature extraction    
-          self.base_model.trainable = False
-          #global_average_layer = tf.keras.layers.GlobalAveragePooling2D()
-          #prediction_layer = tf.keras.layers.Dense(1)
-          
-          # calculate the final size of AveragePooling2D
-          if (info_dict['IMG_SIZE'] % 32) == 0:
-              fin_pool_size = info_dict['IMG_SIZE'] / 32
-          else:
-              print("The pooling size of final AveragePooling2D doesn't match with previous layer!")     
-          
-          # create the custom model
-          inputs = tf.keras.Input(shape=(info_dict['IMG_SIZE'], info_dict['IMG_SIZE'], 3))
-          #x = data_augmentation(inputs)
-          x = inputs
-          #x = preprocess_input(x)
-          x = self.base_model(x, training=False)
-          
-          #x = tf.keras.layers.GlobalAveragePooling2D()(x)
-          x = tf.keras.layers.AveragePooling2D(pool_size=(fin_pool_size, fin_pool_size), strides=(1, 1), padding='valid')(x)
-          x = tf.keras.layers.Dropout(0.2)(x)
-          #outputs = prediction_layer(x)
-          x = tf.keras.layers.Conv2D(class_len, (1, 1), padding="same")(x)
-          x = tf.reshape(x,[-1,class_len])
-          outputs = tf.keras.layers.Softmax()(x)
-          self.custom_model = tf.keras.Model(inputs, outputs)
+        # Rescale pixel values, 
+        # expects pixel values in [-1, 1] from [0, 255], or use 
+        # rescale = tf.keras.layers.Rescaling(1./127.5, offset=-1)
+        #preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
+        
+        if info_dict['IMAGENET_MODEL_EN'] == 0:
+            # Create the base model from the pre-trained model MobileNet V2 without the top layer
+            IMG_SHAPE = (info_dict['IMG_SIZE'], info_dict['IMG_SIZE']) + (3,)
+            if info_dict['MODEL_NAME'] == 'mobilenet_v2':
+                self.base_model = tf.keras.applications.MobileNetV2(input_shape=IMG_SHAPE,
+                                                           include_top=False,
+                                                           weights='imagenet',
+                                                           alpha=info_dict['ALPHA_WIDTH'])
+            elif info_dict['MODEL_NAME'] == 'mobilenet_v3_mini':
+                self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
+                                                                       include_top=False, weights='imagenet', 
+                                                                       minimalistic=True, include_preprocessing=False)
+            elif info_dict['MODEL_NAME'] == 'mobilenet_v3':
+                self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
+                                                                       include_top=False, weights='imagenet', 
+                                                                       minimalistic=False, include_preprocessing=False)    
+                
+            # Feature extraction    
+            self.base_model.trainable = False
+            #global_average_layer = tf.keras.layers.GlobalAveragePooling2D()
+            #prediction_layer = tf.keras.layers.Dense(1)
+            
+            # calculate the final size of AveragePooling2D
+            if (info_dict['IMG_SIZE'] % 32) == 0:
+                fin_pool_size = info_dict['IMG_SIZE'] / 32
+            else:
+                print("The pooling size of final AveragePooling2D doesn't match with previous layer!")     
+            
+            # create the custom model
+            inputs = tf.keras.Input(shape=(info_dict['IMG_SIZE'], info_dict['IMG_SIZE'], 3))
+            #x = data_augmentation(inputs)
+            x = inputs
+            #x = preprocess_input(x)
+            x = self.base_model(x, training=False)
+            if 1:
+                x = tf.keras.layers.GlobalAveragePooling2D()(x)
+                outputs = tf.keras.layers.Dense(class_len, activation='softmax', use_bias=True, name='Logits')(x)
+            else:
+                x = tf.keras.layers.AveragePooling2D(pool_size=(fin_pool_size, fin_pool_size), strides=(1, 1), padding='valid')(x)
+                x = tf.keras.layers.Dropout(0.2)(x)
+                #outputs = prediction_layer(x)
+                x = tf.keras.layers.Conv2D(class_len, (1, 1), padding="same")(x)
+                x = tf.reshape(x,[-1,class_len])
+                outputs = tf.keras.layers.Softmax()(x)
+            
+            self.custom_model = tf.keras.Model(inputs, outputs)
+
+        else: # download the pretrain model only
+            IMG_SHAPE = (info_dict['IMG_SIZE'], info_dict['IMG_SIZE']) + (3,)
+            if info_dict['MODEL_NAME'] == 'mobilenet_v2':
+                self.base_model = tf.keras.applications.MobileNetV2(input_shape=IMG_SHAPE,
+                                                           include_top=True,
+                                                           weights='imagenet',
+                                                           alpha=info_dict['ALPHA_WIDTH'])
+            elif info_dict['MODEL_NAME'] == 'mobilenet_v3_mini':
+                self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
+                                                                       include_top=True, weights='imagenet', 
+                                                                       minimalistic=True, include_preprocessing=False)
+            elif info_dict['MODEL_NAME'] == 'mobilenet_v3':
+                self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
+                                                                       include_top=True, weights='imagenet', 
+                                                                       minimalistic=False, include_preprocessing=False)    
+            self.base_model.trainable = False
+            self.custom_model = self.base_model  
       
-      elif info_dict['MODEL_NAME'] == 'mobilenet_v3':
-          print("mobilenet_v3 is not support yet.")
+      
 
   def predict_TopN(self, custom_model, dataset, top_N=5):
     
@@ -530,7 +562,7 @@ class train():
           self.predict_TopN(self.custom_model, validation_dataset)
       
       # Train the custom_model with freezen weights
-      if info_dict['switch_mode'] >= 2:
+      if (info_dict['switch_mode'] >= 2) and (info_dict['IMAGENET_MODEL_EN'] == 0):
           print("----Start to training----")
           
           epochs_list = list(map(int, info_dict['EPOCHS'].split(',')))
@@ -577,7 +609,7 @@ class train():
           plt.show()
       
       # Fine tunning training
-      if info_dict['switch_mode'] == 3:
+      if (info_dict['switch_mode'] == 3) and (info_dict['IMAGENET_MODEL_EN'] == 0):
           print("\n")
           print("----Start to fine tunning training----") 
           self.fine_tunning(learning_rate_list, info_dict['FINE_TUNE_LAYER'])
@@ -625,7 +657,7 @@ class train():
           plt.savefig(os.path.join(self.proj_path ,"result_plots", 'fine_train_vali_{}.png'.format(loc_dt_format))) # fine tune plot
           plt.show()
       
-      if info_dict['switch_mode'] >= 2:
+      if (info_dict['switch_mode'] >= 2) and (info_dict['IMAGENET_MODEL_EN'] == 0):
           #Test the model
           print("\n")
           print("----Start to Test the model----")
@@ -649,6 +681,11 @@ class train():
           print("\n")
           print("----Save as tflites----") 
           self.convert2tflite(info_dict, train_dataset)
+      if info_dict['IMAGENET_MODEL_EN'] == 1:
+          print("\n")
+          print("----No testing on ImageNet pretrain model----") 
+          print("----Save as tflites----") 
+          self.convert2tflite(info_dict, train_dataset)    
           
                    
   def fine_tunning(self, learning_rate_list, FINE_TUNE_LAYER):
@@ -841,6 +878,11 @@ if __name__ == "__main__":
         default=160,
         help='The image size: (IMG_SIZE, IMG_SIZE)')
   parser.add_argument(
+        '--ALPHA_WIDTH',
+        type=float,
+        default=1.00,
+        help='The test percentage from validation set, 0~0.5')
+  parser.add_argument(
         '--VAL_PCT',
         type=float,
         default=0.2,
@@ -910,7 +952,12 @@ if __name__ == "__main__":
         '--TFLITE_TEST_BATCH_N',
         type=int,
         default=1,
-        help='How many batch for tflite test')     
+        help='How many batch for tflite test')
+  parser.add_argument(
+        '--IMAGENET_MODEL_EN',
+        type=int,
+        default=0,
+        help='Load full ImageNet weights model and without training.')     
 
   args = parser.parse_args()
   
