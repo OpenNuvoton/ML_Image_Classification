@@ -18,6 +18,9 @@ import tensorflow as tf
 #from importlib import reload
 import data_prepare
 
+from tf2cv.model_provider import get_model as tf2cv_get_model
+from tf2cv.models.common import flatten
+
 class workfolder():
     def __init__(self, proj_name):
         self.proj_path =os.path.join(os.getcwd(), 'workspace', proj_name)
@@ -375,130 +378,43 @@ class train():
         # Rescale pixel values, 
         # expects pixel values in [-1, 1] from [0, 255], or use 
         # rescale = tf.keras.layers.Rescaling(1./127.5, offset=-1)
-        #preprocess_input = tf.keras.applications.mobilenet_v2.preprocess_input
         
+        def _unwrap_tf2cv_fdmobilenet(tf2cv_model):
+            tf2cv_model.trainable = False
+            # Be careful, this is basing on the structure of fdmobilenet from tf2cv
+            print("The total layers number: {}".format(len(tf2cv_model.layers)))
+            base_model = tf2cv_model.layers[0]
+            print("The total children layers number: {}".format(len(base_model.children)))
+            
+            # Change the AveragePooling2D to the GlobalAveragePooling2D for sutiable for all kernal size
+            base_model.children[5] = tf.keras.layers.GlobalAveragePooling2D()
+            
+            inp = tf.keras.Input(shape=(info_dict['IMG_SIZE'], info_dict['IMG_SIZE'], 3))
+            x = inp
+            training = None
+            x = base_model(x, training=training)
+            x = tf.keras.layers.Dense(class_len, activation='softmax', use_bias=True, name='Logits')(x)
+
+            return tf.keras.Model(inp, x)
+      
         if info_dict['IMAGENET_MODEL_EN'] == 0:
-            # Create the base model from the pre-trained model MobileNet V2 without the top layer
+            # Create the base model from the fdmobilenet without the top layer
+
+            if info_dict['MODEL_NAME'] == 'fdmobilenet_wd4':
+                net = tf2cv_get_model("fdmobilenet_wd4", pretrained=True, data_format="channels_last")
+                self.custom_model = _unwrap_tf2cv_fdmobilenet(net)
+            if info_dict['MODEL_NAME'] == 'fdmobilenet_wd2':
+                net = tf2cv_get_model("fdmobilenet_wd2", pretrained=True, data_format="channels_last")
+                self.custom_model = _unwrap_tf2cv_fdmobilenet(net)
+            if info_dict['MODEL_NAME'] == 'fdmobilenet_w1':
+                net = tf2cv_get_model("fdmobilenet_w1", pretrained=True, data_format="channels_last")
+                self.custom_model = _unwrap_tf2cv_fdmobilenet(net)    
+            
+        else: # download the pretrain model only
             IMG_SHAPE = (info_dict['IMG_SIZE'], info_dict['IMG_SIZE']) + (3,)
-
-            if info_dict['MODEL_NAME'] == 'mobilenet_v1':
-                self.base_model = tf.keras.applications.MobileNet(input_shape=IMG_SHAPE,
-                                                           include_top=False,
-                                                           weights='imagenet',
-                                                           alpha=info_dict['ALPHA_WIDTH'])
-            if info_dict['MODEL_NAME'] == 'mobilenet_v2':
-                self.base_model = tf.keras.applications.MobileNetV2(input_shape=IMG_SHAPE,
-                                                           include_top=False,
-                                                           weights='imagenet',
-                                                           alpha=info_dict['ALPHA_WIDTH'])
-            elif info_dict['MODEL_NAME'] == 'mobilenet_v3_mini':
-                self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
-                                                                       include_top=False, weights='imagenet', 
-                                                                       minimalistic=True, include_preprocessing=False)
-            elif info_dict['MODEL_NAME'] == 'mobilenet_v3':
-                self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
-                                                                       include_top=False, weights='imagenet', 
-                                                                       minimalistic=False, include_preprocessing=False)    
-                
-            # Feature extraction    
-            self.base_model.trainable = False
-            #global_average_layer = tf.keras.layers.GlobalAveragePooling2D()
-            #prediction_layer = tf.keras.layers.Dense(1)
-            
-            # calculate the final size of AveragePooling2D
-            if (info_dict['IMG_SIZE'] % 32) == 0:
-                fin_pool_size = info_dict['IMG_SIZE'] / 32
-            else:
-                print("The pooling size of final AveragePooling2D doesn't match with previous layer!")     
-            
-            # create the custom model
-            inputs = tf.keras.Input(shape=(info_dict['IMG_SIZE'], info_dict['IMG_SIZE'], 3))
-            #x = data_augmentation(inputs)
-            x = inputs
-            #x = preprocess_input(x)
-            x = self.base_model(x, training=False)
-            if 1:
-                x = tf.keras.layers.GlobalAveragePooling2D()(x)
-                outputs = tf.keras.layers.Dense(class_len, activation='softmax', use_bias=True, name='Logits')(x)
-            else:
-                x = tf.keras.layers.AveragePooling2D(pool_size=(fin_pool_size, fin_pool_size), strides=(1, 1), padding='valid')(x)
-                x = tf.keras.layers.Dropout(0.2)(x)
-                #outputs = prediction_layer(x)
-                x = tf.keras.layers.Conv2D(class_len, (1, 1), padding="same")(x)
-                x = tf.reshape(x,[-1,class_len])
-                outputs = tf.keras.layers.Softmax()(x)
-            
-            self.custom_model = tf.keras.Model(inputs, outputs)
-
-        elif info_dict['IMAGENET_MODEL_EN'] == 1: # download the pretrain model only
-            IMG_SHAPE = (info_dict['IMG_SIZE'], info_dict['IMG_SIZE']) + (3,)
-            if info_dict['MODEL_NAME'] == 'mobilenet_v1':
-                self.base_model = tf.keras.applications.MobileNet(input_shape=IMG_SHAPE,
-                                                           include_top=True,
-                                                           weights='imagenet',
-                                                           alpha=info_dict['ALPHA_WIDTH'])
-            if info_dict['MODEL_NAME'] == 'mobilenet_v2':
-                self.base_model = tf.keras.applications.MobileNetV2(input_shape=IMG_SHAPE,
-                                                           include_top=True,
-                                                           weights='imagenet',
-                                                           alpha=info_dict['ALPHA_WIDTH'])
-            elif info_dict['MODEL_NAME'] == 'mobilenet_v3_mini':
-                self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
-                                                                       include_top=True, weights='imagenet', 
-                                                                       minimalistic=True, include_preprocessing=False)
-            elif info_dict['MODEL_NAME'] == 'mobilenet_v3':
-                self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
-                                                                       include_top=True, weights='imagenet', 
-                                                                       minimalistic=False, include_preprocessing=False)    
-            self.base_model.trainable = False
-            self.custom_model = self.base_model
-
-        else:
-            # Create the model without pre-train model
-            IMG_SHAPE = (info_dict['IMG_SIZE'], info_dict['IMG_SIZE']) + (3,)
-            if info_dict['MODEL_NAME'] == 'mobilenet_v1':
-                self.custom_model = tf.keras.applications.MobileNet(input_shape=IMG_SHAPE,
-                                                           include_top=True, weights=None, classes=class_len,
-                                                           alpha=info_dict['ALPHA_WIDTH'])
-            if info_dict['MODEL_NAME'] == 'mobilenet_v2':
-                self.custom_model = tf.keras.applications.MobileNetV2(input_shape=IMG_SHAPE,
-                                                           include_top=True, weights=None, classes=class_len,
-                                                           alpha=info_dict['ALPHA_WIDTH'])
-            #elif info_dict['MODEL_NAME'] == 'mobilenet_v3_mini':
-            #    self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
-            #                                                           include_top=False, weights=None, classes=class_len, pooling = 'avg',
-            #                                                           minimalistic=True, include_preprocessing=False)
-            elif info_dict['MODEL_NAME'] == 'mobilenet_v3_mini':
-                self.custom_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
-                                                                       include_top=True, weights=None, classes=class_len,
-                                                                       minimalistic=True, include_preprocessing=False)    
-            elif info_dict['MODEL_NAME'] == 'mobilenet_v3':
-                self.custom_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
-                                                                       include_top=True, weights=None, classes=class_len,
-                                                                       minimalistic=False, include_preprocessing=False)  
-
-          #  #self.base_model.trainable = False
-          #
-          #  # create the custom model
-          #  inputs = tf.keras.Input(shape=(info_dict['IMG_SIZE'], info_dict['IMG_SIZE'], 3))
-          #  #x = data_augmentation(inputs)
-          #  x = inputs
-          #  #x = preprocess_input(x)
-          #  x = self.base_model(x, training=True)
-          #  if 1:
-          #      #x = tf.keras.layers.GlobalAveragePooling2D()(x)
-          #      outputs = tf.keras.layers.Dense(class_len, activation='softmax', use_bias=True, name='Logits')(x)
-          #  else:
-          #      x = tf.keras.layers.AveragePooling2D(pool_size=(fin_pool_size, fin_pool_size), strides=(1, 1), padding='valid')(x)
-          #      x = tf.keras.layers.Dropout(0.2)(x)
-          #      #outputs = prediction_layer(x)
-          #      x = tf.keras.layers.Conv2D(class_len, (1, 1), padding="same")(x)
-          #      x = tf.reshape(x,[-1,class_len])
-          #      outputs = tf.keras.layers.Softmax()(x)
-          #  
-          #  self.custom_model = tf.keras.Model(inputs, outputs)
-            
-           
+            print('This function is TODO!')  
+      
+      
 
   def predict_TopN(self, custom_model, dataset, top_N=5):
     
@@ -545,9 +461,14 @@ class train():
   @tf.autograph.experimental.do_not_convert 
   def preprocess_data_augmentation(self, dataset):
        AUTOTUNE = tf.data.AUTOTUNE
+       
+       myseed = 29
        data_augmentation = tf.keras.Sequential([
-       tf.keras.layers.RandomFlip('horizontal',127),
-       tf.keras.layers.RandomRotation(0.2),
+       tf.keras.layers.RandomFlip('horizontal', myseed),
+       tf.keras.layers.RandomRotation(0.2, seed = myseed),
+       tf.keras.layers.RandomContrast(0.3, myseed),
+       tf.keras.layers.RandomBrightness(0.2, value_range=(0, 255),  seed = myseed),
+       #tf.keras.layers.RandomCrop(128, 128, seed=myseed)
        ])
 
        dataset = dataset.map(lambda x, y: (data_augmentation(x, training=True), y), 
@@ -607,15 +528,16 @@ class train():
       
       # TF Board callback create
       self.tf_callback = tf.keras.callbacks.TensorBoard(log_dir = os.path.join(self.proj_path ,"logs"))
-      # check point callback create
-      callbacks_chpt = tf.keras.callbacks.ModelCheckpoint(
-                filepath=(os.path.join(self.proj_path, 'checkpoint', '{val_accuracy:.3f}_best_val.ckpt')),
-                save_weights_only=True, 
-                monitor='val_accuracy',
-                mode = 'max',
-                save_best_only=True, 
-                save_freq='epoch')
+      # check point callback create, tf2cv can't use Checkpoint
+      #callbacks_chpt = tf.keras.callbacks.ModelCheckpoint(
+      #          filepath=(os.path.join(self.proj_path, 'checkpoint', '{val_accuracy:.3f}_best_val.ckpt')),
+      #          #save_weights_only=True, 
+      #          monitor='val_accuracy',
+      #          mode = 'max',
+      #          save_best_only=True, 
+      #          save_freq='epoch')
       callbacks_reducelr = tf.keras.callbacks.ReduceLROnPlateau(monitor='val_accuracy', factor=0.5, patience=10, min_delta=0.005, mode='max', cooldown=3)
+
       
       print("The trainable layers number: {}".format(len(self.custom_model.trainable_variables)))
       print("The pretrain model result is as below (use validation dataset):")
@@ -628,7 +550,7 @@ class train():
           self.predict_TopN(self.custom_model, validation_dataset)
       
       # Train the custom_model with freezen weights
-      if (info_dict['switch_mode'] >= 2) and ((info_dict['IMAGENET_MODEL_EN'] == 0) or (info_dict['IMAGENET_MODEL_EN'] == 2)):
+      if (info_dict['switch_mode'] >= 2) and (info_dict['IMAGENET_MODEL_EN'] == 0):
           print("----Start to training----")
           
           epochs_list = list(map(int, info_dict['EPOCHS'].split(',')))
@@ -637,14 +559,14 @@ class train():
               history = self.custom_model.fit(train_dataset, verbose=1,
                                           epochs=epochs_list[0],
                                           validation_data=validation_dataset,
-                                          callbacks=[self.tf_callback, callbacks_chpt, callbacks_reducelr])
+                                          callbacks=[self.tf_callback, callbacks_reducelr])
           else: # Use 'STEPS_PER_EPOCH' mode. Be careful the OOM if 'STEPS_PER_EPOCH' is too large.                                      
               train_dataset = train_dataset.repeat() # repeat the dataset, all training is steps_per_epoch * epochs.
               history = self.custom_model.fit(train_dataset, verbose=1,
                                               epochs=epochs_list[0],
                                               steps_per_epoch=info_dict['STEPS_PER_EPOCH'],
                                               validation_data=validation_dataset,
-                                              callbacks=[self.tf_callback, callbacks_chpt, callbacks_reducelr])
+                                              callbacks=[self.tf_callback, callbacks_reducelr])
           
           # Show the train result
           acc = history.history['accuracy']
@@ -687,14 +609,14 @@ class train():
                                                    epochs=total_epochs,
                                                    initial_epoch=history.epoch[-1],
                                                    validation_data=validation_dataset,
-                                                   callbacks=[self.tf_callback, callbacks_chpt, callbacks_reducelr])
+                                                   callbacks=[self.tf_callback])
           else: # Use 'STEPS_PER_EPOCH' mode. Be careful the OOM if 'STEPS_PER_EPOCH' is too large.                                         
               history_fine = self.custom_model.fit(train_dataset, verbose=1,
                                                    epochs=total_epochs,
                                                    initial_epoch=history.epoch[-1],
                                                    steps_per_epoch=info_dict['STEPS_PER_EPOCH'],
                                                    validation_data=validation_dataset,
-                                                   callbacks=[self.tf_callback, callbacks_chpt, callbacks_reducelr])
+                                                   callbacks=[self.tf_callback])
           # Show the train result
           acc += history_fine.history['accuracy']
           val_acc += history_fine.history['val_accuracy']
@@ -723,7 +645,7 @@ class train():
           plt.savefig(os.path.join(self.proj_path ,"result_plots", 'fine_train_vali_{}.png'.format(loc_dt_format))) # fine tune plot
           plt.show()
       
-      if (info_dict['switch_mode'] >= 2) and ((info_dict['IMAGENET_MODEL_EN'] == 0) or (info_dict['IMAGENET_MODEL_EN'] == 2)):
+      if (info_dict['switch_mode'] >= 2) and (info_dict['IMAGENET_MODEL_EN'] == 0):
           #Test the model
           print("\n")
           print("----Start to Test the model----")
@@ -756,18 +678,20 @@ class train():
                    
   def fine_tunning(self, learning_rate_list, FINE_TUNE_LAYER):
       
-      # Set the base_model as trainable
-      self.base_model.trainable = True
-      print("Number of layers in the base model: ", len(self.base_model.layers))
+      self.custom_model.trainable = True
       
-      fine_tune_at = FINE_TUNE_LAYER
-      # Freeze all the layers before the `fine_tune_at` layer
-      for layer in self.base_model.layers[:fine_tune_at]:
-          layer.trainable = False     
-      
+      if info_dict['MODEL_NAME'].count('fdmobilenet'):
+          # Set the freeze layers from the beginning
+          for tf2cv_layer in self.custom_model.layers[1].children[0:4]: # The first layer is input
+              tf2cv_layer.trainable = False
+              
+          for block in self.custom_model.layers[1].children[4][0:FINE_TUNE_LAYER]:  # The 5th child is the major parts  
+              block.trainable = False
+          
       # compile the fine tunning model    
       self.custom_model.compile(loss="sparse_categorical_crossentropy",
-                optimizer = tf.keras.optimizers.RMSprop(learning_rate=learning_rate_list[1]),
+                #optimizer = tf.keras.optimizers.RMSprop(learning_rate=learning_rate_list[1]),
+                optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate_list[1]),
                 metrics=['accuracy'])
       self.custom_model.summary()
       print("The trainable layers number: {}".format(len(self.custom_model.trainable_variables)))
@@ -958,7 +882,7 @@ if __name__ == "__main__":
   parser.add_argument(
         '--MODEL_NAME',
         type=str,
-        default='mobilenet_v2',
+        default='fdmobilenet_wd2',
         help='Choose the using model')     
   parser.add_argument(
         '--TEST_PCT',
@@ -999,7 +923,7 @@ if __name__ == "__main__":
         default=1,
         help='1: Show the train data and model, \
               2: Transfer training, \
-              3: Transfer and fine tuning training, \
+              3: (Not Work Now)Transfer and fine tuning training, \
               4: Test tflite')
   #parser.add_argument(
   #      '--TEST_RECORD',
@@ -1023,7 +947,7 @@ if __name__ == "__main__":
         '--IMAGENET_MODEL_EN',
         type=int,
         default=0,
-        help='0: Pretrain ImageNet weights. 1: Load full ImageNet weights model and without training. 2: No pretrain model.')     
+        help='Load full ImageNet weights model and without training.')     
 
   args = parser.parse_args()
   
