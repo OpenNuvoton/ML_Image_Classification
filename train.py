@@ -371,7 +371,7 @@ class train():
       print("Finish the Val  TFrecord Creating: {}.".format(val_record_file))
       print("Finish the Test TFrecord Creating: {}.".format(test_record_file))             
 
-  def _model_chooser(self, info_dict, class_len):
+  def _model_chooser(self, info_dict, class_len, dropout_rate):
         # Rescale pixel values, 
         # expects pixel values in [-1, 1] from [0, 255], or use 
         # rescale = tf.keras.layers.Rescaling(1./127.5, offset=-1)
@@ -386,7 +386,7 @@ class train():
                                                            include_top=False,
                                                            weights='imagenet',
                                                            alpha=info_dict['ALPHA_WIDTH'])
-            if info_dict['MODEL_NAME'] == 'mobilenet_v2':
+            elif info_dict['MODEL_NAME'] == 'mobilenet_v2':
                 self.base_model = tf.keras.applications.MobileNetV2(input_shape=IMG_SHAPE,
                                                            include_top=False,
                                                            weights='imagenet',
@@ -398,7 +398,15 @@ class train():
             elif info_dict['MODEL_NAME'] == 'mobilenet_v3':
                 self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
                                                                        include_top=False, weights='imagenet', 
-                                                                       minimalistic=False, include_preprocessing=False)    
+                                                                       minimalistic=False, include_preprocessing=False)
+            elif info_dict['MODEL_NAME'] == 'efficientnetB0':
+                self.base_model = tf.keras.applications.EfficientNetB0(input_shape=IMG_SHAPE,
+                                                           include_top=False,
+                                                           weights='imagenet')
+            elif info_dict['MODEL_NAME'] == 'efficientnetv2B0':
+                self.base_model = tf.keras.applications.EfficientNetV2B0(input_shape=IMG_SHAPE,
+                                                           include_top=False, include_preprocessing=True,
+                                                           weights='imagenet')                 
                 
             # Feature extraction    
             self.base_model.trainable = False
@@ -419,6 +427,8 @@ class train():
             x = self.base_model(x, training=False)
             if 1:
                 x = tf.keras.layers.GlobalAveragePooling2D()(x)
+                if dropout_rate > 0:
+                    x = tf.keras.layers.Dropout(dropout_rate, name="top_dropout")(x)
                 outputs = tf.keras.layers.Dense(class_len, activation='softmax', use_bias=True, name='Logits')(x)
             else:
                 x = tf.keras.layers.AveragePooling2D(pool_size=(fin_pool_size, fin_pool_size), strides=(1, 1), padding='valid')(x)
@@ -437,7 +447,7 @@ class train():
                                                            include_top=True,
                                                            weights='imagenet',
                                                            alpha=info_dict['ALPHA_WIDTH'])
-            if info_dict['MODEL_NAME'] == 'mobilenet_v2':
+            elif info_dict['MODEL_NAME'] == 'mobilenet_v2':
                 self.base_model = tf.keras.applications.MobileNetV2(input_shape=IMG_SHAPE,
                                                            include_top=True,
                                                            weights='imagenet',
@@ -449,7 +459,15 @@ class train():
             elif info_dict['MODEL_NAME'] == 'mobilenet_v3':
                 self.base_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
                                                                        include_top=True, weights='imagenet', 
-                                                                       minimalistic=False, include_preprocessing=False)    
+                                                                       minimalistic=False, include_preprocessing=False)
+            elif info_dict['MODEL_NAME'] == 'efficientnetB0':
+                self.base_model = tf.keras.applications.EfficientNetB0(input_shape=IMG_SHAPE,
+                                                           include_top=True,
+                                                           weights='imagenet')
+            elif info_dict['MODEL_NAME'] == 'efficientnetv2B0':
+                self.base_model = tf.keras.applications.EfficientNetV2B0(input_shape=IMG_SHAPE,
+                                                           include_top=True, include_preprocessing=True,
+                                                           weights='imagenet')       
             self.base_model.trainable = False
             self.custom_model = self.base_model
 
@@ -475,7 +493,13 @@ class train():
             elif info_dict['MODEL_NAME'] == 'mobilenet_v3':
                 self.custom_model = tf.keras.applications.MobileNetV3Small(input_shape = IMG_SHAPE, alpha=info_dict['ALPHA_WIDTH'], 
                                                                        include_top=True, weights=None, classes=class_len,
-                                                                       minimalistic=False, include_preprocessing=False)  
+                                                                       minimalistic=False, include_preprocessing=False)
+            if info_dict['MODEL_NAME'] == 'efficientnetB0':
+                self.custom_model = tf.keras.applications.EfficientNetB0(input_shape=IMG_SHAPE,
+                                                           include_top=True, weights=None, classes=class_len)
+            if info_dict['MODEL_NAME'] == 'efficientnetv2B0':
+                self.custom_model = tf.keras.applications.EfficientNetV2B0(input_shape=IMG_SHAPE, include_preprocessing=True,
+                                                           include_top=True, weights=None, classes=class_len)         
 
           #  #self.base_model.trainable = False
           #
@@ -545,6 +569,7 @@ class train():
   @tf.autograph.experimental.do_not_convert 
   def preprocess_data_augmentation(self, dataset):
        AUTOTUNE = tf.data.AUTOTUNE
+       
        data_augmentation = tf.keras.Sequential([
        tf.keras.layers.RandomFlip('horizontal',127),
        tf.keras.layers.RandomRotation(0.2),
@@ -584,9 +609,11 @@ class train():
       # Use data augmentation
       train_dataset = self.preprocess_data_augmentation(train_dataset) # val & test data no need.
 
-      # normalization for the data
-      train_dataset = self.normalization_mobilenetv2(train_dataset)
-      validation_dataset = self.normalization_mobilenetv2(validation_dataset)
+      # normalization for the data, efficientnet has normalization layers in model.
+      if not info_dict['MODEL_NAME'].count('efficientnet'):
+          print("The dataset no need normalization bcs it is in model layer!")
+          train_dataset = self.normalization_mobilenetv2(train_dataset)
+          validation_dataset = self.normalization_mobilenetv2(validation_dataset)
       if info_dict['switch_mode'] == 1:
           image_batch, labels_batch = next(iter(train_dataset))
           first_image = image_batch[0]
@@ -596,7 +623,7 @@ class train():
       # create the base pre-train model
       print("----Start to create model----")
       
-      self._model_chooser(info_dict, class_len)
+      self._model_chooser(info_dict, class_len, 0.2)
       
       learning_rate_list = list(map(float, info_dict['LEARNING_RATE'].split(',')))
       self.custom_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate_list[0]),
@@ -727,7 +754,8 @@ class train():
           #Test the model
           print("\n")
           print("----Start to Test the model----")
-          test_dataset = self.normalization_mobilenetv2(test_dataset) 
+          if not info_dict['MODEL_NAME'].count('efficientnet'):
+              test_dataset = self.normalization_mobilenetv2(test_dataset) 
           loss, accuracy = self.custom_model.evaluate(test_dataset)
           print('Test accuracy :', accuracy)
 
@@ -1062,9 +1090,9 @@ if __name__ == "__main__":
         plt.show() 
   
   if info_dict['switch_mode'] == 4:
-    output_location = os.path.join(train_task.output_tflite_location, args.TFLITE_F)
-    print("Test tflite: {}".format(output_location))
-    train_task.tflite_inference(test_dataset, output_location, info_dict, info_dict['TFLITE_TEST_BATCH_N'])
+    #output_location = os.path.join(train_task.output_tflite_location, args.TFLITE_F)
+    print("Test tflite: {}".format(args.TFLITE_F))
+    train_task.tflite_inference(test_dataset, args.TFLITE_F, info_dict, info_dict['TFLITE_TEST_BATCH_N'])
   else:  
     # Start to prepare training
     train_task.train(info_dict, train_dataset, validation_dataset, test_dataset)

@@ -374,7 +374,7 @@ class train():
       print("Finish the Val  TFrecord Creating: {}.".format(val_record_file))
       print("Finish the Test TFrecord Creating: {}.".format(test_record_file))             
 
-  def _model_chooser(self, info_dict, class_len):
+  def _model_chooser(self, info_dict, class_len, dropout_rate):
         # Rescale pixel values, 
         # expects pixel values in [-1, 1] from [0, 255], or use 
         # rescale = tf.keras.layers.Rescaling(1./127.5, offset=-1)
@@ -393,8 +393,40 @@ class train():
             x = inp
             training = None
             x = base_model(x, training=training)
+            if dropout_rate > 0:
+                    x = tf.keras.layers.Dropout(dropout_rate, name="top_dropout")(x)
             x = tf.keras.layers.Dense(class_len, activation='softmax', use_bias=True, name='Logits')(x)
 
+            return tf.keras.Model(inp, x)
+        
+        def unwrap_tf2cv_shufflenet(tf2cv_model):
+            tf2cv_model.trainable = False
+            # Be careful, this is basing on the structure of shufflenet from tf2cv
+            print("The total layers number: {}".format(len(tf2cv_model.layers)))
+            base_model = tf2cv_model.layers[0]
+            print("The total children layers number: {}".format(len(base_model.children)))
+            print("The total children layers number of children 1: {}".format(len(base_model.children[1].children)))
+            print("The total children layers number of children 2: {}".format(len(base_model.children[2].children)))
+            print("The total children layers number of children 3: {}".format(len(base_model.children[3].children)))
+            
+            # Change the AveragePooling2D to the GlobalAveragePooling2D for sutiable for all kernal size
+            base_model.children[4] = tf.keras.layers.GlobalAveragePooling2D()
+            
+            inp = tf.keras.Input(shape=(info_dict['IMG_SIZE'], info_dict['IMG_SIZE'], 3))
+            x = inp
+            training = None
+            x = base_model(x, training=training)
+            if dropout_rate > 0:
+                    x = tf.keras.layers.Dropout(dropout_rate, name="top_dropout")(x)
+            x = tf.keras.layers.Dense(class_len, activation='softmax', use_bias=True, name='Logits')(x)
+            # method 2
+            #x = flatten(x, "channels_last")
+            #output1 = nn.Dense(units=1000,input_dim=3,name="output1")
+            #x = output1(x)
+            # method 3
+            #x = tf.keras.layers.Conv2D(1000, (1, 1), padding="same")(x)
+            #x = tf.reshape(x,[-1,1000])
+            #x = tf.keras.layers.Softmax()(x)
             return tf.keras.Model(inp, x)
       
         if info_dict['IMAGENET_MODEL_EN'] == 0:
@@ -408,7 +440,20 @@ class train():
                 self.custom_model = _unwrap_tf2cv_fdmobilenet(net)
             if info_dict['MODEL_NAME'] == 'fdmobilenet_w1':
                 net = tf2cv_get_model("fdmobilenet_w1", pretrained=True, data_format="channels_last")
-                self.custom_model = _unwrap_tf2cv_fdmobilenet(net)    
+                self.custom_model = _unwrap_tf2cv_fdmobilenet(net)
+                
+            if info_dict['MODEL_NAME'] == 'shufflenet_g1_wd4':
+                net = tf2cv_get_model("shufflenet_g1_wd4", pretrained=True, data_format="channels_last")
+                self.custom_model = unwrap_tf2cv_shufflenet(net)
+            if info_dict['MODEL_NAME'] == 'shufflenet_g3_wd4':
+                net = tf2cv_get_model("shufflenet_g3_wd4", pretrained=True, data_format="channels_last")
+                self.custom_model = unwrap_tf2cv_shufflenet(net)
+            if info_dict['MODEL_NAME'] == 'shufflenet_g1_wd2':
+                net = tf2cv_get_model("shufflenet_g1_wd2", pretrained=True, data_format="channels_last")
+                self.custom_model = unwrap_tf2cv_shufflenet(net)
+            if info_dict['MODEL_NAME'] == 'shufflenet_g3_wd2':
+                net = tf2cv_get_model("shufflenet_g3_wd2", pretrained=True, data_format="channels_last")
+                self.custom_model = unwrap_tf2cv_shufflenet(net)                    
             
         else: # download the pretrain model only
             IMG_SHAPE = (info_dict['IMG_SIZE'], info_dict['IMG_SIZE']) + (3,)
@@ -464,7 +509,7 @@ class train():
        
        myseed = 29
        data_augmentation = tf.keras.Sequential([
-       tf.keras.layers.RandomFlip('horizontal', myseed),
+       #tf.keras.layers.RandomFlip('horizontal', myseed),
        tf.keras.layers.RandomRotation(0.2, seed = myseed),
        tf.keras.layers.RandomContrast(0.3, myseed),
        tf.keras.layers.RandomBrightness(0.2, value_range=(0, 255),  seed = myseed),
@@ -517,7 +562,7 @@ class train():
       # create the base pre-train model
       print("----Start to create model----")
       
-      self._model_chooser(info_dict, class_len)
+      self._model_chooser(info_dict, class_len, 0.2)
       
       learning_rate_list = list(map(float, info_dict['LEARNING_RATE'].split(',')))
       self.custom_model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=learning_rate_list[0]),
@@ -609,14 +654,14 @@ class train():
                                                    epochs=total_epochs,
                                                    initial_epoch=history.epoch[-1],
                                                    validation_data=validation_dataset,
-                                                   callbacks=[self.tf_callback])
+                                                   callbacks=[self.tf_callback, callbacks_reducelr])
           else: # Use 'STEPS_PER_EPOCH' mode. Be careful the OOM if 'STEPS_PER_EPOCH' is too large.                                         
               history_fine = self.custom_model.fit(train_dataset, verbose=1,
                                                    epochs=total_epochs,
                                                    initial_epoch=history.epoch[-1],
                                                    steps_per_epoch=info_dict['STEPS_PER_EPOCH'],
                                                    validation_data=validation_dataset,
-                                                   callbacks=[self.tf_callback])
+                                                   callbacks=[self.tf_callback, callbacks_reducelr])
           # Show the train result
           acc += history_fine.history['accuracy']
           val_acc += history_fine.history['val_accuracy']
@@ -682,11 +727,50 @@ class train():
       
       if info_dict['MODEL_NAME'].count('fdmobilenet'):
           # Set the freeze layers from the beginning
-          for tf2cv_layer in self.custom_model.layers[1].children[0:4]: # The first layer is input
-              tf2cv_layer.trainable = False
-              
-          for block in self.custom_model.layers[1].children[4][0:FINE_TUNE_LAYER]:  # The 5th child is the major parts  
-              block.trainable = False
+          
+          if FINE_TUNE_LAYER == 10:
+              for tf2cv_layer in self.custom_model.layers[1].children[0:5]: # The layers are 0~3. The first layer is input
+                  tf2cv_layer.trainable = False
+          elif FINE_TUNE_LAYER > 4 and FINE_TUNE_LAYER <= 9:
+              for tf2cv_layer in self.custom_model.layers[1].children[0:4]: # The layers are 0~3. The first layer is input
+                  tf2cv_layer.trainable = False
+              for block in self.custom_model.layers[1].children[4][0:(FINE_TUNE_LAYER - 5)]:  # The 5th child is the major parts which has 6 layers 
+                  block.trainable = False  
+          elif FINE_TUNE_LAYER > 0 and FINE_TUNE_LAYER <= 4:
+              for tf2cv_layer in self.custom_model.layers[1].children[0:(FINE_TUNE_LAYER - 1)]: # The layers are 0~3. The first layer is input
+                  tf2cv_layer.trainable = False      
+          elif FINE_TUNE_LAYER == 0:  
+              print("No freezing layers. The whole model is trainable!!")
+          else:
+              print("ERROR, the Freezing Layers of Fine-Tuning shold be in 0~17")     
+          
+      elif info_dict['MODEL_NAME'].count('shufflenet'):
+          # Set the freeze layers from the beginning
+          if FINE_TUNE_LAYER == 17:
+              print("Only last layer is trainable!!")
+              self.custom_model.layers[1].children[0].trainable = False # 1 layer
+              self.custom_model.layers[1].children[1].trainable = False # 4 layers
+              self.custom_model.layers[1].children[2].trainable = False # 8 layers
+              self.custom_model.layers[1].children[3].trainable = False # 4 layers
+          elif FINE_TUNE_LAYER > 12 and FINE_TUNE_LAYER <= 16:
+              self.custom_model.layers[1].children[0].trainable = False
+              self.custom_model.layers[1].children[1].trainable = False
+              self.custom_model.layers[1].children[2].trainable = False
+              for tf2cv_layer in self.custom_model.layers[1].children[3].children[0:(FINE_TUNE_LAYER - 13)]: # The layers are 1~3. 4 8 4
+                  tf2cv_layer.trainable = False
+          elif FINE_TUNE_LAYER > 4 and FINE_TUNE_LAYER <= 12:
+              self.custom_model.layers[1].children[0].trainable = False
+              self.custom_model.layers[1].children[1].trainable = False
+              for tf2cv_layer in self.custom_model.layers[1].children[2].children[0:(FINE_TUNE_LAYER-5)]: # The layers are 1~3. 4 8 4
+                  tf2cv_layer.trainable = False
+          elif FINE_TUNE_LAYER > 0 and FINE_TUNE_LAYER <= 4:
+              self.custom_model.layers[1].children[0].trainable = False
+              for tf2cv_layer in self.custom_model.layers[1].children[1].children[0:(FINE_TUNE_LAYER-1)]: # The layers are 1~3. 4 8 4
+                  tf2cv_layer.trainable = False
+          elif FINE_TUNE_LAYER == 0:  
+              print("No freezing layers. The whole model is trainable!!")
+          else:
+              print("ERROR, the Freezing Layers of Fine-Tuning shold be in 0~17")                              
           
       # compile the fine tunning model    
       self.custom_model.compile(loss="sparse_categorical_crossentropy",
@@ -986,9 +1070,9 @@ if __name__ == "__main__":
         plt.show() 
   
   if info_dict['switch_mode'] == 4:
-    output_location = os.path.join(train_task.output_tflite_location, args.TFLITE_F)
-    print("Test tflite: {}".format(output_location))
-    train_task.tflite_inference(test_dataset, output_location, info_dict, info_dict['TFLITE_TEST_BATCH_N'])
+    #output_location = os.path.join(train_task.output_tflite_location, args.TFLITE_F)
+    print("Test tflite: {}".format(args.TFLITE_F))
+    train_task.tflite_inference(test_dataset, args.TFLITE_F, info_dict, info_dict['TFLITE_TEST_BATCH_N'])
   else:  
     # Start to prepare training
     train_task.train(info_dict, train_dataset, validation_dataset, test_dataset)
