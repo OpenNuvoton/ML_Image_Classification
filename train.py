@@ -14,6 +14,8 @@ import datetime
 from tqdm.notebook import tqdm
 
 import tensorflow as tf
+from tensorflow.python.profiler.model_analyzer import profile
+from tensorflow.python.profiler.option_builder import ProfileOptionBuilder
 
 #from importlib import reload
 import data_prepare
@@ -55,6 +57,9 @@ class train():
       self.base_model = tf.keras.Sequential([])
       self.custom_model  = tf.keras.Sequential([])
       self.output_tflite_location = os.path.join(self.proj_path, "tflite_model")
+      self.flops = 0
+      self.total_para = 0
+      self.int8_tflite_size = 0
 
       self.tf_callback = None
 
@@ -369,8 +374,28 @@ class train():
                 plt.show()
                     
       print("Finish the Val  TFrecord Creating: {}.".format(val_record_file))
-      print("Finish the Test TFrecord Creating: {}.".format(test_record_file))             
+      print("Finish the Test TFrecord Creating: {}.".format(test_record_file))
 
+  def _cal_macs(model_func):
+      def wrap_cal_macs(self, *args, **kargs):
+          model_func(self, *args, **kargs)
+          
+          forward_pass = tf.function(
+              self.custom_model.call,
+              input_signature=[tf.TensorSpec(shape=(1,) + self.custom_model.input_shape[1:])])
+          
+          graph_info = profile(forward_pass.get_concrete_function().graph,
+                                  options=ProfileOptionBuilder.float_operation())
+          
+          # The //2 is necessary since `profile` counts multiply and accumulate
+          # as two flops, here we report the total number of multiply accumulate ops
+          self.flops = graph_info.total_float_ops // 2
+          print('TensorFlow:', tf.__version__)
+          print('The MACs of this model: {:,}'.format(self.flops))
+
+      return wrap_cal_macs
+                       
+  @_cal_macs
   def _model_chooser(self, info_dict, class_len, dropout_rate):
         # Rescale pixel values, 
         # expects pixel values in [-1, 1] from [0, 255], or use 
@@ -631,6 +656,7 @@ class train():
                 loss="sparse_categorical_crossentropy",
                 metrics=['accuracy'])          
       self.custom_model.summary()
+      self.total_para = self.custom_model.count_params()
       
       # TF Board callback create
       self.tf_callback = tf.keras.callbacks.TensorBoard(log_dir = os.path.join(self.proj_path ,"logs"))
@@ -768,19 +794,25 @@ class train():
           # Save the test result
           test_txt_path = os.path.join(self.proj_path ,"result_plots", 'fine_train_testAcc_{}.txt'.format(loc_dt_format)) 
           with open(test_txt_path, 'w') as f:
-              f.write('Test accuracy:{}'.format(accuracy) + '\n')
-              f.write('Top-{} accuracy:{}'.format(top_N, top_N_accuracy*100) + '\n')
-          
+              f.write('Test accuracy: {}'.format(accuracy) + '\n')
+              f.write('Top-{} accuracy: {}'.format(top_N, top_N_accuracy*100) + '\n')
+              f.write('MACs: {}'.format(self.flops) + '\n')
+              f.write('Total Parameters: {}'.format(self.total_para) + '\n')
+
           # Save as tflite
           print("\n")
           print("----Save as tflites----") 
           self.convert2tflite(info_dict, train_dataset)
+        
       if info_dict['IMAGENET_MODEL_EN'] == 1:
           print("\n")
           print("----No testing on ImageNet pretrain model----") 
           print("----Save as tflites----") 
-          self.convert2tflite(info_dict, train_dataset)    
-          
+          self.convert2tflite(info_dict, train_dataset)
+              
+      # Add a tflite_size into txt
+      with open(test_txt_path, 'a') as f:
+          f.write('The int8 QUANT tflite size: {}'.format(self.int8_tflite_size) + '\n')    
                    
   def fine_tunning(self, learning_rate_list, FINE_TUNE_LAYER):
       
@@ -816,7 +848,7 @@ class train():
       # normal tflite
       converter = tf.lite.TFLiteConverter.from_keras_model(self.custom_model)
       tflite_model = converter.convert()
-      output_location = os.path.join(self.output_tflite_location, (info_dict['MODEL_NAME'] + r'.tflite'))
+      output_location = os.path.join(self.output_tflite_location, (info_dict['proj_name'] + r'.tflite'))
       with open(output_location, 'wb') as f:
             f.write(tflite_model)
       print("The tflite output location: {}".format(output_location)) 
@@ -825,7 +857,7 @@ class train():
       converter = tf.lite.TFLiteConverter.from_keras_model(self.custom_model)
       converter.optimizations = [tf.lite.Optimize.DEFAULT]
       tflite_model = converter.convert()
-      output_location = os.path.join(self.output_tflite_location, (info_dict['MODEL_NAME'] + r'_dyquant.tflite'))
+      output_location = os.path.join(self.output_tflite_location, (info_dict['proj_name'] + r'_dyquant.tflite'))
       with open(output_location, 'wb') as f:
             f.write(tflite_model)
       print("The tflite output location: {}".format(output_location))
@@ -838,10 +870,11 @@ class train():
       converter.inference_input_type = tf.int8  # or tf.uint8
       converter.inference_output_type = tf.int8  # or tf.uint8
       tflite_model = converter.convert()
-      output_location = os.path.join(self.output_tflite_location, (info_dict['MODEL_NAME'] + r'_int8quant.tflite'))
+      output_location = os.path.join(self.output_tflite_location, (info_dict['proj_name'] + r'_int8quant.tflite'))
       with open(output_location, 'wb') as f:
             f.write(tflite_model)
-      print("The tflite output location: {}".format(output_location)) 
+      print("The tflite output location: {}".format(output_location))
+      self.int8_tflite_size = os.path.getsize(output_location) 
       
       # f16 tflite
       converter = tf.lite.TFLiteConverter.from_keras_model(self.custom_model)
@@ -849,7 +882,7 @@ class train():
       converter.target_spec.supported_types = [tf.float16]
       #converter.representative_dataset = representative_dataset
       tflite_model = converter.convert()
-      output_location = os.path.join(self.output_tflite_location, (args.MODEL_NAME + r'_f16quant.tflite'))
+      output_location = os.path.join(self.output_tflite_location, (info_dict['proj_name'] + r'_f16quant.tflite'))
       with open(output_location, 'wb') as f:
             f.write(tflite_model)
       print("The tflite output location: {}".format(output_location))                    
