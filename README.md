@@ -26,6 +26,9 @@
 - The `cmd.ipynb` notebook will demonstrate how to use the script located in `datasets\gen_rgb_cpp.py` to convert an image to a bytes source file.
 
 ## 3. Inference code
-- MCU: 
+- MCU:
+    - [M55M1](https://github.com/OpenNuvoton/M55M1BSP/tree/master/SampleCode/MachineLearning)
+    - M460: Please contact Nuvoton
+      
 - MPU: [MA35D1](https://github.com/OpenNuvoton/MA35D1_Linux_Applications/tree/master/machine_learning)
 
