@@ -27,8 +27,10 @@
 
 ## 3. Inference code
 - MCU:
-    - [M55M1](https://github.com/OpenNuvoton/M55M1BSP/tree/master/SampleCode/MachineLearning)
-    - M460: Please contact Nuvoton
+    - The ML_SampleCode repositories are private. Please contact Nuvoton to request access to these sample codes. [Link](https://www.nuvoton.com/ai/contact-us/)
+        - [ML_M460_SampleCode (private repo)](https://github.com/OpenNuvoton/ML_M460_SampleCode)
+    - [M55M1BSP (public)](https://github.com/OpenNuvoton/M55M1BSP/tree/master/SampleCode/MachineLearning)
       
-- MPU: [MA35D1](https://github.com/OpenNuvoton/MA35D1_Linux_Applications/tree/master/machine_learning)
+- MPU:
+    - [MA35D1](https://github.com/OpenNuvoton/MA35D1_Linux_Applications/tree/master/machine_learning)
 
