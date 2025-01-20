@@ -5,14 +5,14 @@ set IMAGE_SRC_HEIGHT=320
 ::set LABEL_SRC_FILE=..\labels\labels_mobilenet_v2_1.0_224.txt
 ::set GEN_LABEL_FILE_NAME=Labels
 
-set MODEL_SRC_DIR=generated
-set MODEL_SRC_FILE=shufflenet_g1_w1.tflite
-set MODEL_OPTIMISE_FILE=shufflenet_g1_w1_vela.tflite
+set MODEL_SRC_DIR=..\workspace\MyTask_0120\tflite_model
+set MODEL_SRC_FILE=MyTask_0120_int8quant.tflite
+set MODEL_OPTIMISE_FILE=MyTask_0120_int8quant_vela.tflite
 ::The vela OPTIMISE_FILE should be SRC_FILE_NAME + _vela
 
 set TEMPLATES_DIR=Tool\tflite2cpp\templates
 
-set GEN_SRC_DIR=generated
+set GEN_SRC_DIR=..\workspace\MyTask_0120\tflite_model\vela
 set GEN_INC_DIR=generated\include
 
 ::vela configure variable section

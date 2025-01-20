@@ -40,7 +40,7 @@ parser.add_argument("--namespaces", action='append', default=[])
 parser.add_argument("--license_template", type=str, help="Header template file",
                     default="header_template.txt")
 
-args = parser.parse_args()
+args_paser = parser.parse_args()
 
 env = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(__file__), 'templates')),
                   trim_blocks=True,
@@ -48,14 +48,25 @@ env = Environment(loader=FileSystemLoader(os.path.join(os.path.dirname(__file__)
 
 
 def main(args):
+    """
+    Main function to generate C++ header and source files for labels.
+    Args:
+        args: Command line arguments containing the following attributes:
+            - labels_dataset_name (str): The name of the dataset containing the labels.
+            - license_template (str): The path to the license template file.
+            - header_folder_path (str): The path to the folder where the header file will be saved.
+            - output_file_name (str): The base name for the output files (without extension).
+            - source_folder_path (str): The path to the folder where the source file will be saved.
+            - namespaces (list): A list of namespaces to be used in the generated files.
+    """
     # Get the labels from text file
     txt_path = os.path.join('datasets', args.labels_dataset_name, 'labels.txt') # The name of labels.txt is fixed.
-    with open(txt_path, "r") as f:
+    with open(txt_path, "r", encoding="utf-8") as f:
         labels = f.read().splitlines()
 
     # No labels?
     if len(labels) == 0:
-        raise Exception(f"no labels found in {args.label_file}")
+        raise ValueError(f"No labels found in {txt_path}")
 
     header_template = env.get_template(args.license_template)
     hdr = header_template.render(script_name=os.path.basename(__file__),
@@ -79,4 +90,4 @@ def main(args):
 
 
 if __name__ == '__main__':
-    main(args)
+    main(args_paser)
